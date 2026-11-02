@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>서울 따릉이 대여소 현황</title>
+    <!-- Tailwind CSS 로드 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+    <div class="max-w-3xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden">
+        
+        <!-- 헤더 영역 -->
+        <div class="bg-blue-600 p-6 text-white flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex flex-col items-center md:items-start">
+                <h1 class="text-2xl font-bold flex items-center gap-2">
+                    🚲 서울 따릉이 현황
+                    <span id="statusBadge" class="hidden text-xs font-medium px-2.5 py-0.5 rounded border"></span>
+                </h1>
+                <p class="text-blue-100 text-sm mt-1">마지막 갱신: <span id="lastUpdated">-</span></p>
+            </div>
+            
+            <button onclick="loadBikes()" class="bg-white text-blue-600 hover:bg-blue-50 font-semibold py-2 px-4 border border-transparent rounded shadow-sm transition-colors duration-200 flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                새로고침
+            </button>
+        </div>
+
+        <!-- 검색 영역 -->
+        <div class="p-6 border-b border-gray-100">
+            <div class="relative">
+                <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                    <svg aria-hidden="true" class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                </div>
+                <input type="text" id="searchInput" class="block w-full p-3 pl-10 text-sm text-gray-900 border border-gray-300 rounded-lg bg-gray-50 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" placeholder="대여소 이름을 검색하세요..." autocomplete="off">
+            </div>
+        </div>
+
+        <!-- 대여소 리스트 영역 -->
+        <div class="p-6">
+            <div id="listContainer" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <!-- 자바스크립트를 통해 아이템들이 렌더링됩니다 -->
+            </div>
+            
+            <!-- 로딩 표시 및 결과 없음 -->
+            <div id="loadingMessage" class="text-center text-gray-500 py-8 hidden">데이터를 불러오는 중입니다...</div>
+            <div id="noResultMessage" class="text-center text-gray-500 py-8 hidden">검색 결과가 없습니다.</div>
+        </div>
+
+    </div>
+
+    <script>
+        // 샘플 데이터
+        const SAMPLE_DATA = {
+            "rentBikeStatus": {
+                "list_total_count": 5,
+                "RESULT": {"CODE": "INFO-000", "MESSAGE": "정상 처리되었습니다."},
+                "row": [
+                    {"rackTotCnt": "15", "stationName": "102. 망원역 1번출구 앞", "parkingBikeTotCnt": "11", "shared": "73", "stationLatitude": "37.55564880", "stationLongitude": "126.91062927", "stationId": "ST-4"},
+                    {"rackTotCnt": "14", "stationName": "103. 망원역 2번출구 앞", "parkingBikeTotCnt": "12", "shared": "86", "stationLatitude": "37.55495071", "stationLongitude": "126.91083527", "stationId": "ST-5"},
+                    {"rackTotCnt": "13", "stationName": "104. 합정역 1번출구 앞", "parkingBikeTotCnt": "16", "shared": "123", "stationLatitude": "37.55073929", "stationLongitude": "126.91508484", "stationId": "ST-6"},
+                    {"rackTotCnt": "5", "stationName": "105. 합정역 5번출구 앞", "parkingBikeTotCnt": "0", "shared": "0", "stationLatitude": "37.55000687", "stationLongitude": "126.91482544", "stationId": "ST-7"},
+                    {"rackTotCnt": "12", "stationName": "106. 합정역 7번출구 앞", "parkingBikeTotCnt": "1", "shared": "8", "stationLatitude": "37.54864502", "stationLongitude": "126.91282654", "stationId": "ST-8"}
+                ]
+            }
+        };
+
+        let currentStations = [];
+        let isSampleData = false;
+
+        // 시간 포맷팅 함수
+        function getFormattedTime() {
+            const now = new Date();
+            const pad = (n) => n.toString().padStart(2, '0');
+            return `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+        }
+
+        // 데이터 로드 함수
+        async function loadBikes() {
+            const container = document.getElementById('listContainer');
+            const loading = document.getElementById('loadingMessage');
+            
+            container.innerHTML = '';
+            loading.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/api/bike');
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                const data = await response.json();
+                currentStations = data.rentBikeStatus.row;
+                isSampleData = false;
+            } catch (error) {
+                console.warn('API 호출 실패. 샘플 데이터로 대체합니다.', error);
+                currentStations = SAMPLE_DATA.rentBikeStatus.row;
+                isSampleData = true;
+            }
+
+            // 상태 표시줄 업데이트
+            const statusBadge = document.getElementById('statusBadge');
+            statusBadge.classList.remove('hidden');
+            if (isSampleData) {
+                statusBadge.textContent = '샘플 데이터';
+                statusBadge.className = 'inline-block bg-yellow-400 text-yellow-900 text-xs font-bold px-2.5 py-0.5 rounded border border-yellow-500 ml-2';
+            } else {
+                statusBadge.textContent = '실시간 데이터';
+                statusBadge.className = 'inline-block bg-green-400 text-green-900 text-xs font-bold px-2.5 py-0.5 rounded border border-green-500 ml-2';
+            }
+
+            // 마지막 갱신 시간 업데이트
+            document.getElementById('lastUpdated').textContent = getFormattedTime();
+
+            loading.classList.add('hidden');
+            renderBikes();
+        }
+
+        // 화면 렌더링 함수
+        function renderBikes() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const container = document.getElementById('listContainer');
+            const noResult = document.getElementById('noResultMessage');
+            
+            container.innerHTML = '';
+
+            // 검색어 필터링
+            const filteredStations = currentStations.filter(station => 
+                station.stationName.toLowerCase().includes(query)
+            );
+
+            if (filteredStations.length === 0) {
+                noResult.classList.remove('hidden');
+            } else {
+                noResult.classList.add('hidden');
+                
+                filteredStations.forEach(station => {
+                    // 문자열 데이터를 숫자로 변환
+                    const parkingCnt = parseInt(station.parkingBikeTotCnt, 10) || 0;
+                    const rackCnt = parseInt(station.rackTotCnt, 10) || 0;
+                    const sharedRate = parseInt(station.shared, 10) || 0;
+
+                    // 자전거 수에 따른 테마 설정
+                    const isEmpty = parkingCnt === 0;
+                    const cardBg = isEmpty ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200';
+                    const textColor = isEmpty ? 'text-red-600' : 'text-blue-600';
+                    const barColor = isEmpty ? 'bg-red-500' : 'bg-blue-500';
+                    const titleColor = isEmpty ? 'text-red-800' : 'text-gray-800';
+
+                    // 카드 엘리먼트 생성
+                    const card = document.createElement('div');
+                    card.className = `p-4 rounded-xl border shadow-sm flex flex-col gap-3 transition-all duration-300 hover:shadow-md ${cardBg}`;
+                    
+                    // 퍼센트 바 최대 넓이 제한 (UI가 깨지지 않게 방지)
+                    const displayPercent = Math.min(sharedRate, 100);
+
+                    card.innerHTML = `
+                        <div class="font-bold text-base md:text-lg ${titleColor} truncate" title="${station.stationName}">
+                            ${station.stationName}
+                        </div>
+                        <div class="flex justify-between items-end mt-2">
+                            <span class="text-sm font-medium text-gray-500">대여 가능</span>
+                            <span class="text-2xl font-bold ${textColor}">
+                                ${parkingCnt} <span class="text-sm font-normal text-gray-500">/ ${rackCnt}대</span>
+                            </span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2 mt-1">
+                            <div class="${barColor} h-2 rounded-full transition-all duration-500" style="width: ${displayPercent}%"></div>
+                        </div>
+                        <div class="text-right text-xs text-gray-500 font-medium">거치율: ${sharedRate}%</div>
+                    `;
+                    
+                    container.appendChild(card);
+                });
+            }
+        }
+
+        // 검색창 이벤트 리스너 추가
+        document.getElementById('searchInput').addEventListener('input', renderBikes);
+
+        // 초기 로드
+        window.onload = loadBikes;
+    </script>
+</body>
+</html>
